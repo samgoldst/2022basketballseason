@@ -4,23 +4,31 @@ from __future__ import annotations
 import copy
 import csv
 
+
 class Game:
     def __init__(self, game_data: list[str]):
         self.team, self.opponent, self.date, self.outcome = game_data[:4]
-        self.min, self.pts, self.fgm, self.fga, self.fgp, self.tpm, self.tpa, self.tpp, self.ftm, self.fta, self.ftp, self.oreb, self.dreb, self.reb, self.ast, self.stl, self.blk, self.tov, self.pf, self.pm = [float(i) for i in game_data[4:]]
+        self.min, self.pts, self.fgm, self.fga, self.fgp, self.tpm, self.tpa, self.tpp, self.ftm, self.fta, self.ftp, \
+            self.oreb, self.dreb, self.reb, self.ast, self.stl, self.blk, self.tov, self.pf, self.pm = [
+                float(i) for i in game_data[4:]]
 
-    def toString(self):
-        return vars(self).values()
+    def toString(self) -> str:
+        return str(vars(self).values())
 
-    def getId(self):
+    def getId(self) -> str:
         return self.team + ' ' + self.date
 
+
 class Season:
-    def __init__(self, games: list[list[str]] | list[Game]):
-        if type(games[0]) == list:
-            self.games = [Game(game) for game in games]
+    def __init__(self, games: list[list[str]] | list[Game] | None):
+        if games is None:
+            self.games: list[Game] = []
+        elif type(games[0]) == list:
+            self.games: list[Game] = [Game(game) for game in games]
+        elif type(games[0]) == Game:
+            self.games: list[Game] = games
         else:
-            self.games = games
+            raise TypeError
 
     def filter(self, stat: str, minimum: float, comparison: str):
         output: list[Game] = []
@@ -46,17 +54,14 @@ class Season:
             output += str(game.toString())[12:-1] + "\n"
         print(output)
 
-
-'''DOESNT WORK YET'''
-
     def save(self, filename: str):
         output = []
         for game in self.games:
-            output.append(str(game.toString())[12:-1])
-        with open(filename, "w") as file:
+            output.append(list(vars(game).values()))
+        with open(filename, "w", newline='') as file:
             writer = csv.writer(file, delimiter='\t')
             for g in output:
-                writer.writerows(output)
+                writer.writerow(g)
 
     def len(self):
         return len(self.games)
@@ -77,21 +82,67 @@ class Season:
                 setattr(game, stat, value)
         return self
 
-with open("season.csv") as data:
-    games = [a for a in csv.reader(data, delimiter='\t')]
+    def load(self, file: str):
+        with open(file) as data:
+            for a in csv.reader(data, delimiter='\t'):
+                self.games.append(Game(a))
+        return self
 
-    Season(games).multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
+    def find(self, stat: str, value):
+        output = Season(None)
+        value = str(value)
+        for game in self.games:
+            if value in str(game.__getattribute__(stat)):
+                output.add_game(game)
+        return output
 
-    #delete game
-    Season(games).delete_game("HOU 12/20/21").multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
+    def winPercentage(self):
+        total = self.len()
+        if total == 0:
+            return "NO GAMES EXIST"
+        wins = 0.0
+        for game in self.games:
+            if game.outcome == "W":
+                wins += 1
+        return wins/total
 
-    #add game
-    newGame = Game("UTA	OKC	04/06/22	W	100	100	100	100	100	100	100	100	100	100	100	100	39	55	29	7	10	13	13	-10".split("\t"))
-    Season(games).add_game(newGame).multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
+    def average(self, stat: str):
+        num_games = self.len()
+        if num_games == 0:
+            return "NO GAMES EXIST"
+        stat_total = 0.0
+        for game in self.games:
+            stat_total += game.__getattribute__(stat)
+        return stat_total/num_games
 
-    #edit game
-    Season(games).add_game(newGame).edit_stat("UTA 04/06/22", "fgm", 10000.0).multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
 
-    #save game DOESN'T WORK YET
-    Season(games).add_game(newGame).edit_stat("UTA 04/06/22", "fgm", 10000.0).multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).save("output.csv")
 
+#regular filter
+Season(None).load("season.csv").multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
+
+#find by points, outcome
+Season(None).load("season.csv").find("pts", "120").find("outcome", "L").out()
+
+# delete game
+Season(None).load("season.csv").delete_game("HOU 12/20/21").multi_filter(
+    [("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
+
+# add game
+newGame = Game(
+    "UTA	OKC	04/06/22	W	100	100	100	100	100	100	100	100	100	100	100	100	39	55	29	7	10	13	13	-10".split(
+        "\t"))
+Season(None).load("season.csv").add_game(newGame).multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
+
+# edit stat
+Season(None).load("season.csv").add_game(newGame).edit_stat("UTA 04/06/22", "fgm", 10000.0).multi_filter(
+    [("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
+
+# save to file
+Season(None).load("season.csv").add_game(newGame).edit_stat("UTA 04/06/22", "fgm", 10000.0).multi_filter(
+    [("fgp", 55, "greater"), ("pm", 0, "lower")]).save("output.csv")
+
+#get average
+print(Season(None).load("season.csv").find("outcome", "W").average("pts"), "\n")
+
+#get win percentage of teams in games where there points contained the digit 2
+print(Season(None).load("season.csv").find("pts", "2").winPercentage(), "\n")
