@@ -39,7 +39,12 @@ class Season:
         else:
             raise TypeError
 
-    def filter(self, stat: str, minimum: float, comparison: str):
+    def filter(self, stat: str, minimum: float, comparison: str = "greater"):
+        if type(minimum) is str:
+            try:
+                minimum = float(minimum)
+            except ValueError:
+                raise Exception(f"{minimum} cannot be converted to float")
         output: list[Game] = []
         if comparison == "greater":
             for game in self.games:
@@ -66,7 +71,7 @@ class Season:
     def save(self, filename: str):
         output = []
         for game in self.games:
-            output.append(list(vars(game).values()))
+            output.append(list(vars(game).values())[:-3])
         with open(filename, "w", newline='') as file:
             writer = csv.writer(file, delimiter='\t')
             for g in output:
@@ -88,6 +93,11 @@ class Season:
     def edit_stat(self, target: str, stat: str, value: float | str):
         for num, game in enumerate(self.games):
             if game.getId() == target:
+                if type(getattr(game, stat)) is float:
+                    try:
+                        value = float(value)
+                    except ValueError:
+                        raise Exception(f"{value} cannot be converted to float")
                 setattr(game, stat, value)
         return self
 
@@ -96,6 +106,9 @@ class Season:
             for a in csv.reader(data, delimiter='\t'):
                 self.games.append(Game(a))
         return self
+
+    def reset(self):
+        self.games.clear()
 
     def find(self, stat: str, value):
         output = Season(None)
@@ -124,7 +137,14 @@ class Season:
             stat_total += game.__getattribute__(stat)
         return stat_total/num_games
 
-    def sort(self, stat: str, descending: bool = True):
+    def sort(self, stat: str, descending: bool | str = True):
+        if type(descending) == str:
+            if descending.lower() == "true":
+                descending = True
+            elif descending.lower() == "false":
+                descending = False
+            else:
+                raise Exception("string is not true or false")
         return Season(sorted(self.games, key=(lambda g: g.__getattribute__(stat)), reverse=descending))
 
     def plot(self, stat1: str, stat2: str | None):
@@ -152,44 +172,8 @@ class Season:
         most = max(set(list), key=list.count)
         return str(most) + ": " + str(list.count(most))
 
-'''
-#regular filter
-Season(None).load("season.csv").multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
-
-#find by points, outcome
-Season(None).load("season.csv").find("pts", "120").find("outcome", "L").out()
-
-# delete game
-Season(None).load("season.csv").delete_game("HOU 12/20/21").multi_filter(
-    [("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
-
-# add game
-newGame = Game(
-    "UTA	OKC	04/06/22	W	100	100	100	100	100	100	100	100	100	100	100	100	39	55	29	7	10	13	13	-10".split(
-        "\t"))
-Season(None).load("season.csv").add_game(newGame).multi_filter([("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
-
-# edit stat
-Season(None).load("season.csv").add_game(newGame).edit_stat("UTA 04/06/22", "fgm", 10000.0).multi_filter(
-    [("fgp", 55, "greater"), ("pm", 0, "lower")]).out()
-
-# save to file
-Season(None).load("season.csv").add_game(newGame).edit_stat("UTA 04/06/22", "fgm", 10000.0).multi_filter(
-    [("fgp", 55, "greater"), ("pm", 0, "lower")]).save("output.csv")
-
-Season(None).load("season.csv").sort("pts", True).out()
-
-
-#get win percentage of teams in games where there points contained the digit 2
-print(Season(None).load("season.csv").find("pts", "2").winPercentage(), "\n")
-
-print(Season(None).load("season.csv").find("outcome", "W").average("advscore"), "\n")
-
-Season(None).load("season.csv").plot("blk", "stl")
-
-Season(None).load("season.csv").sort("advscore", descending=True).out()'''
-
-#https://pythonguides.com/python-tkinter-table-tutorial/
+    def show(self):
+        gui(self)
 
 def gui(season: Season):
     root = tk.Tk()
@@ -216,11 +200,17 @@ def gui(season: Season):
     tv.pack(fill="both", expand=True)
     root.mainloop()
 
-gui(Season(None).load("season.csv").sort("pts"))
-
 season = Season(None).load("season.csv")
+
+season.show()
+season.plot("pts", "ast")
+
 while True:
-    full_input = input().strip()
+    full_input = input("> ").strip()
     command = full_input.split(" ")[0]
     args = full_input.split(" ")[1:]
-    season.__getattribute__(command)(*args)
+    new_season = season.__getattribute__(command)(*args)
+    if type(new_season) == Season:
+        season = new_season
+    elif new_season is not None:
+        print(new_season)
